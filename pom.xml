@@ -11,9 +11,9 @@
 	<description>A Maven plugin to add Ivy artifacts as dependencies</description>
 	<url>https://github.com/remis-thoughts/maven-ivy-plugin</url>
 	<scm>
-		<connection>scm:git:git@github.com:remis-thoughts/blog.git</connection>
-		<url>scm:git:git@github.com:remis-thoughts/blog.git</url>
-		<developerConnection>scm:git:git@github.com:remis-thoughts/blog.git</developerConnection>
+		<connection>scm:git:git@github.com:remis-thoughts/ivy-maven-plugin.git</connection>
+		<url>scm:git:git@github.com:remis-thoughts/ivy-maven-plugin.git</url>
+		<developerConnection>scm:git:git@github.com:remis-thoughts/ivy-maven-plugin.git</developerConnection>
 	</scm>
 	<licenses>
 		<license>
