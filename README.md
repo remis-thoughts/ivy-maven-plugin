@@ -18,6 +18,7 @@ The fields of each dependency element correspond to their Ivy equivalent as foll
 - *version* is an Ivy module *revision*
 - *type* is the Ivy artifact *type* and *ext*
 - *classifier* is a String or regex that matches an Ivy artifact's name.
+- *baseVersion* is the Ivy *configuration* to use, defaulting to "default" if not given
 
 The plugin can only refer to Ivy artifacts from the *default* configuration of each Ivy dependency.
 
