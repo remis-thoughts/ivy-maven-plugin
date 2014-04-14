@@ -3,10 +3,13 @@ package com.github.remisthoughts;
 import java.io.File;
 import java.net.URL;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
 
 import org.apache.ivy.Ivy;
@@ -51,6 +54,7 @@ import org.sonatype.aether.util.artifact.ArtifactProperties;
 public class IvyMojo extends AbstractMojo
 {
 	private static final String IVY_GROUP_MARKER = "ivy.";
+	private static final String IVY_CONFIGURATION_MARKER = ".";
 	private static final String CONF = "default";
 
 	private class IvyArtifactResolver implements ArtifactResolver {
@@ -72,14 +76,16 @@ public class IvyMojo extends AbstractMojo
 
 		private List<Artifact> retrieve(ArtifactRequest request) throws ArtifactResolutionException {
 			try {
-				return resolve(
+				String groupId = request.getArtifact().getGroupId().substring(IVY_GROUP_MARKER.length());
+				return new ArrayList<Artifact>(resolve(
 						ivy,
-						request.getArtifact().getGroupId().substring(IVY_GROUP_MARKER.length()),
+						groupId.substring(groupId.indexOf(IVY_CONFIGURATION_MARKER) + 1),
 						request.getArtifact().getArtifactId(),
 						request.getArtifact().getVersion(),
 						request.getArtifact().getClassifier(),
 						request.getArtifact().getExtension(),
-						false); // not transitive, as this is for a single request
+						false, // not transitive, as this is for a single request
+						groupId.substring(0, groupId.indexOf(IVY_CONFIGURATION_MARKER)))); 
 			} catch (MojoExecutionException e) {
 				throw new ArtifactResolutionException(Collections.singletonList(new ArtifactResult(request)));
 			}
@@ -88,13 +94,14 @@ public class IvyMojo extends AbstractMojo
 		private ArtifactResult convert(ArtifactRequest request, Artifact mvnArtifact) {
 			Map<String, String> props = new TreeMap<String, String>();
 			props.put(ArtifactProperties.LANGUAGE, "java");
-			props.put(ArtifactProperties.TYPE, "jar");
+			props.put(ArtifactProperties.TYPE, mvnArtifact.getType());
 			props.put(ArtifactProperties.CONSTITUTES_BUILD_PATH, "true");
 			props.put(ArtifactProperties.INCLUDES_DEPENDENCIES, "false");
 			return new ArtifactResult(request).
 					setArtifact(new org.sonatype.aether.util.artifact.DefaultArtifact(
 							mvnArtifact.getGroupId(),
 							mvnArtifact.getArtifactId(),
+							mvnArtifact.getClassifier(),
 							mvnArtifact.getType(),
 							mvnArtifact.getVersion()).
 							setFile(mvnArtifact.getFile()).
@@ -107,6 +114,7 @@ public class IvyMojo extends AbstractMojo
 			for (ArtifactRequest request : requests) {
 				if (request.getArtifact().getGroupId().startsWith(IVY_GROUP_MARKER)) {
 					for (Artifact mvnArtifact : retrieve(request)) {
+				System.out.printf("=======> %s\n", request.getArtifact());	
 						ret.add(convert(request, mvnArtifact));
 					}
 				} else {
@@ -173,7 +181,16 @@ public class IvyMojo extends AbstractMojo
 		for (ArtifactItem item : dependencies) {
 			// we need to resolve now to calculate the transitive 
 			// dependencies (if required)
-			for (Artifact resolved : resolve(ivy, item.getGroupId(), item.getArtifactId(), item.getVersion(), item.getClassifier(), item.getType(), transitive)) {
+			Set<Artifact> allResolved = resolve(
+				ivy, 
+				item.getGroupId(), 
+				item.getArtifactId(), 
+				item.getVersion(), 
+				item.getClassifier(), 
+				item.getType(), 
+				transitive,
+				item.getBaseVersion());
+			for (Artifact resolved : allResolved) {
 				Dependency dep = new Dependency();
 				dep.setGroupId(resolved.getGroupId());
 				dep.setArtifactId(resolved.getArtifactId());
@@ -192,14 +209,16 @@ public class IvyMojo extends AbstractMojo
 		((DefaultRepositorySystem) repoSystem).setArtifactResolver(new IvyArtifactResolver(ivy, artifactResolver));
 	}
 
-	private List<Artifact> resolve(
+	private Set<Artifact> resolve(
 			Ivy ivy,
 			String groupId,
 			String artifactId,
 			String version,
 			String classifier,
 			String type,
-			boolean transitive) throws MojoExecutionException
+			boolean transitive,
+			String configuration // or NULL for "*"
+		) throws MojoExecutionException
 	{
 		DefaultModuleDescriptor md = DefaultModuleDescriptor.newDefaultInstance(ModuleRevisionId.newInstance("maven-ivy-plugin", "resolution", "1.0"));
 		md.addConfiguration(new Configuration(CONF));
@@ -207,7 +226,7 @@ public class IvyMojo extends AbstractMojo
 		// add our single dependency
 		ModuleRevisionId module = ModuleRevisionId.newInstance(groupId, artifactId, version);
 		DefaultDependencyDescriptor dd = new DefaultDependencyDescriptor(md, module, true, false, transitive);
-		dd.addDependencyConfiguration(CONF, CONF);
+		dd.addDependencyConfiguration(CONF, configuration == null ? "*" : configuration);
 		dd.addIncludeRule("", new DefaultIncludeRule(
 				new ArtifactId(module.getModuleId(), classifier == null ? ".*" : classifier, type, type),
 				new ExactOrRegexpPatternMatcher(),
@@ -229,18 +248,36 @@ public class IvyMojo extends AbstractMojo
 			throw new MojoExecutionException("no ivy artifacts resolved for artifact");
 		}
 
-		List<Artifact> artifacts = new ArrayList<Artifact>(1);
+		// we'll put the artifacts in a Set so if we get duplicates (e.g. from different configurations)
+		// we'll only process them once.
+		Set<Artifact> artifacts = new HashSet<Artifact>(1);
+
 		for (ArtifactDownloadReport artifactReport : report.getAllArtifactsReports()) {
 			ModuleRevisionId id = ((MDArtifact) artifactReport.getArtifact()).getModuleRevisionId();
-			if (artifactReport.getArtifactOrigin().getArtifact().getName() != null && artifactReport.getLocalFile() != null) {
+			if (artifactReport.getArtifactOrigin() != null
+			&& artifactReport.getArtifactOrigin().getArtifact() != null
+			&& artifactReport.getArtifactOrigin().getArtifact().getName() != null 
+			&& artifactReport.getLocalFile() != null) {
 				String thisClassifier = artifactReport.getArtifactOrigin().getArtifact().getName();
 				String filename = artifactReport.getLocalFile().getName();
 				String thisType = filename.substring(filename.lastIndexOf('.') + 1);
+				List<String> thisConfigurations = Arrays.asList(artifactReport.getArtifactOrigin().getArtifact().getConfigurations());
+
+				// if there's more than one configuration possible we can't just pick one at
+				// random (!) as it may be private.
+				String thisConfiguration = "*";
+
+				if(type != null && !thisType.equals(type)) {
+					continue;
+				}
+				if(classifier != null && !classifier.matches(thisClassifier)) {
+					continue;
+				}
 
 				DefaultArtifactHandler handler = new DefaultArtifactHandler();
 				handler.setAddedToClasspath(true);
 				DefaultArtifact artifact = new DefaultArtifact(
-						IVY_GROUP_MARKER + id.getOrganisation(),
+						IVY_GROUP_MARKER + thisConfiguration + IVY_CONFIGURATION_MARKER + id.getOrganisation(),
 						id.getName(),
 						VersionRange.createFromVersion(id.getRevision()),
 						scope,
