@@ -114,7 +114,6 @@ public class IvyMojo extends AbstractMojo
 			for (ArtifactRequest request : requests) {
 				if (request.getArtifact().getGroupId().startsWith(IVY_GROUP_MARKER)) {
 					for (Artifact mvnArtifact : retrieve(request)) {
-				System.out.printf("=======> %s\n", request.getArtifact());	
 						ret.add(convert(request, mvnArtifact));
 					}
 				} else {
