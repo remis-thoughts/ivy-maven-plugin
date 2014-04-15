@@ -260,7 +260,6 @@ public class IvyMojo extends AbstractMojo
 				String thisClassifier = artifactReport.getArtifactOrigin().getArtifact().getName();
 				String filename = artifactReport.getLocalFile().getName();
 				String thisType = filename.substring(filename.lastIndexOf('.') + 1);
-				List<String> thisConfigurations = Arrays.asList(artifactReport.getArtifactOrigin().getArtifact().getConfigurations());
 
 				// if there's more than one configuration possible we can't just pick one at
 				// random (!) as it may be private.

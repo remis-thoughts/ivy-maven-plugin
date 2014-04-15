@@ -30,7 +30,7 @@ An example of what to put in your pom.xml:
 &lt;plugin&gt;
   &lt;groupId&gt;com.github.remis-thoughts&lt;/groupId&gt;
   &lt;artifactId&gt;ivy-maven-plugin&lt;/artifactId&gt;
-  &lt;version&gt;1.0.1&lt;/version&gt;
+  &lt;version&gt;1.0.2&lt;/version&gt;
   &lt;executions&gt;
     &lt;execution&gt;
       &lt;id&gt;add-dependencies&lt;/id&gt;
